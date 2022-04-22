@@ -176,9 +176,20 @@ The full text of the license is available at http://www.gnu.org/copyleft/lesser.
             </xsl:for-each-group>
         </xsl:for-each-group>
         
-        <!-- General rule for all zib root concepts -->
-        <xsl:for-each-group select="$in[not(self::patient or self::zorgverlener)][.//(@value | @code | @nullFlavor)]" group-by="nf:getGroupingKeyDefault(.)">
-            <xsl:call-template name="_buildFhirMetadataForAdaEntry"/>
+        <!-- General rule for all zib root concepts that need to be converted into a FHIR resource -->
+        <xsl:for-each-group select="(
+              $in[not(self::patient or self::zorgverlener)],
+              $in//horen_hulpmiddel/medisch_hulpmiddel,
+              $in//zien_hulpmiddel/medisch_hulpmiddel,
+              $in//product[parent::medisch_hulpmiddel],
+              $in//visueel_resultaat[parent::tekst_uitslag],
+              $in//soepregel[parent::soepverslag]
+            )[.//(@value | @code | @nullFlavor)]" group-by="local-name()">
+            <xsl:for-each-group select="current-group()" group-by="nf:getGroupingKeyDefault(.)">
+                <xsl:call-template name="_buildFhirMetadataForAdaEntry">
+                    <xsl:with-param name="partNumber" select="position()"/>
+                </xsl:call-template>
+            </xsl:for-each-group>
         </xsl:for-each-group>
         
         <xsl:for-each select="$in[not(.//(@value | @code | @nullFlavor))][not(ends-with(local-name(),'-start'))]">
@@ -190,9 +201,11 @@ The full text of the license is available at http://www.gnu.org/copyleft/lesser.
     <xd:doc>
         <xd:desc>Helper template to build the FHIR metadata for a singe ADA instance. See the documentation on <xd:ref name="buildFhirMetadata" type="template"/> for more information.</xd:desc>
         <xd:param name="in">The ADA instance to generate metadata for.</xd:param>
+        <xd:param name="partNumber">The sequence number of the ADA instance being passed in the total collection of ADA instances of this kind. This sequence number is needed for ids in resources that represent just a part of a zib.</xd:param>
     </xd:doc>
     <xsl:template name="_buildFhirMetadataForAdaEntry" as="element(nm:resource)*">
         <xsl:param name="in" select="current-group()[1]"/>
+        <xsl:param name="partNumber" as="xs:integer" select="0"/>
         
         <xsl:variable name="adaElement" as="xs:string" select="$in/local-name()"/>
         <xsl:variable name="adaId" select="$in/@id"/>
@@ -236,6 +249,7 @@ The full text of the license is available at http://www.gnu.org/copyleft/lesser.
                         <xsl:otherwise>
                             <xsl:apply-templates select="$in" mode="_generateId">
                                 <xsl:with-param name="profile" select="$profile"/>
+                                <xsl:with-param name="partNumber" select="$partNumber"/>
                             </xsl:apply-templates>
                         </xsl:otherwise>
                     </xsl:choose>
@@ -295,35 +309,6 @@ The full text of the license is available at http://www.gnu.org/copyleft/lesser.
                 </nm:reference-display>
             </nm:resource>
         </xsl:for-each>
-        
-        <!-- HearingFunction.HearingAid::MedicalDevice, VisualFunction.VisualAid::MedicalDevice, MedicalDevice::Product, SOAPReport::SOAPLine and TextResult::VisualResult are special cases, where a single concept leads to a separate resource, therefore we have to build separate entries for these concepts -->
-        <xsl:choose>
-            <xsl:when test="$in/self::functie_horen">
-                <xsl:for-each-group select="$in/horen_hulpmiddel/medisch_hulpmiddel" group-by="nf:getGroupingKeyDefault(.)">
-                    <xsl:call-template name="_buildFhirMetadataForAdaEntry"/>
-                </xsl:for-each-group>
-            </xsl:when>
-            <xsl:when test="$in/self::functie_zien">
-                <xsl:for-each-group select="$in/zien_hulpmiddel/medisch_hulpmiddel" group-by="nf:getGroupingKeyDefault(.)">
-                    <xsl:call-template name="_buildFhirMetadataForAdaEntry"/>
-                </xsl:for-each-group>
-            </xsl:when>
-            <xsl:when test="$in/self::medisch_hulpmiddel">
-                <xsl:for-each-group select="$in/product" group-by="nf:getGroupingKeyDefault(.)">
-                    <xsl:call-template name="_buildFhirMetadataForAdaEntry"/>
-                </xsl:for-each-group>
-            </xsl:when>
-            <xsl:when test="$in/self::soepverslag">
-                <xsl:for-each-group select="$in/soepregel" group-by="nf:getGroupingKeyDefault(.)">
-                    <xsl:call-template name="_buildFhirMetadataForAdaEntry"/>
-                </xsl:for-each-group>
-            </xsl:when>
-            <xsl:when test="$in/self::tekst_uitslag">
-                <xsl:for-each-group select="$in/visueel_resultaat" group-by="nf:getGroupingKeyDefault(.)">
-                    <xsl:call-template name="_buildFhirMetadataForAdaEntry"/>
-                </xsl:for-each-group>
-            </xsl:when>
-        </xsl:choose>
     </xsl:template>
     
     <xd:doc>
